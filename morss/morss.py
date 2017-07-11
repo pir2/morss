@@ -391,7 +391,7 @@ def FeedFetch(url, options):
         feed.build()
         rss = feed.feed
         
-    elseif ('contenttype == text/xml, charset=UTF-8'):
+    elif ('contenttype == text/xml, charset=UTF-8'):
         rss = feeds.parse(xml)
         
     else:
