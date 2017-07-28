@@ -35,19 +35,29 @@ def count_words(string):
     return count
 
 
-regex_bad = re.compile('|'.join(['robots-nocontent', 'combx', 'comment',
-    'community', 'disqus', 'extra', 'foot', 'header', 'menu', 'remark', 'rss',
-    'shoutbox', 'sidebar', 'sponsor', 'ad-', 'agegate', 'pagination',
-    'pager', 'popup', 'tweet', 'twitter', 'com-', 'sharing', 'share', 'social',
-    'contact', 'footnote', 'masthead', 'media', 'meta', 'outbrain', 'promo',
-    'related', 'scroll', 'shoutbox', 'shopping', 'tags',
-    'tool', 'widget', 'hide', 'author', 'about']), re.I)
+regex_bad = re.compile('|'.join(['comment', 'community', 'extra', 'foot',
+    'sponsor', 'pagination', 'pager', 'tweet', 'twitter', 'com-', 'masthead',
+    'media', 'meta', 'related', 'shopping', 'tags', 'tool', 'author', 'about']),
+    re.I)
 
-regex_good = re.compile('|'.join(['and', 'article', 'body', 'column',
-    'main', 'shadow', 'content', 'entry', 'hentry', 'main', 'page',
-    'pagination', 'post', 'text', 'blog', 'story', 'par', 'editorial']), re.I)
+regex_junk = re.compile('|'.join(['robots-nocontent', 'combx', 'disqus',
+    'header', 'menu', 'remark', 'rss', 'shoutbox', 'sidebar', 'ad-', 'agegate',
+    'popup', 'sharing', 'share', 'social', 'contact', 'footnote', 'outbrain',
+    'promo', 'scroll', 'hidden', 'widget', 'hide']), re.I)
 
-tags_junk = ['script', 'head', 'iframe', 'object', 'noscript', 'param', 'embed', 'layer', 'applet', 'style', 'form', 'input', 'textarea', 'button']
+regex_good = re.compile('|'.join(['and', 'article', 'body', 'column', 'main',
+    'shadow', 'content', 'entry', 'hentry', 'main', 'page', 'pagination',
+    'post', 'text', 'blog', 'story', 'par', 'editorial']), re.I)
+
+
+tags_bad = ['a']
+
+tags_junk = ['script', 'head', 'iframe', 'object', 'noscript', 'param', 'embed',
+    'layer', 'applet', 'style', 'form', 'input', 'textarea', 'button', 'footer']
+
+tags_good = ['h1', 'h2', 'h3', 'article', 'p', 'cite', 'section', 'img',
+    'figcaption', 'figure']
+
 
 attributes_fine = ['title', 'src', 'href', 'type', 'name', 'for', 'value']
 
@@ -58,27 +68,29 @@ def score_node(node):
     if isinstance(node, lxml.html.HtmlComment):
         return 0
 
+    class_id = node.get('class', '') + node.get('id', '')
+
+    score -= len(regex_bad.findall(class_id))
+    score -= len(regex_junk.findall(class_id))
+    score += len(regex_good.findall(class_id))
+
     wc = count_words(''.join([node.text or ''] + [x.tail or '' for x in node]))
     # the .tail part is to include *everything* in that node
 
-    if wc < 5:
-        return 0
+    if wc > 10:
+        score += 1
 
-    if node.tag in ['h1', 'h2', 'h3', 'article']:
-        score += 8
+    if wc > 20:
+        score += 1
 
-    if node.tag in ['p', 'cite', 'section']:
+    if wc > 30:
+        score += 1
+
+    if node.tag in tags_bad or node.tag in tags_junk:
+        score = -1 * abs(score)
+
+    if node.tag in tags_good:
         score += 3
-
-    class_id = node.get('class', '') + node.get('id', '')
-
-    score += len(regex_good.findall(class_id) * 5)
-    score -= len(regex_bad.findall(class_id) * 3)
-
-    score += wc / 5.
-
-    if node.tag in tags_junk or node.tag in ['a']:
-        score *= -1
 
     return score
 
@@ -86,65 +98,100 @@ def score_node(node):
 def score_all(root):
     grades = {}
 
-    for item in root.iter():
-        score = score_node(item)
+    for node in list(root.iter()):
+        score = score_node(node)
 
-        grades[item] = score
+        parent = node.getparent()
+        clean_node(node)
 
-        factor = 2
-        for ancestor in item.iterancestors():
-            if score / factor > 1:
-                grades[ancestor] += score / factor
-                factor *= 2
+        if parent is not None and node.getparent() is None:
+            # if the node got deleted/dropped (else, nothing to do)
+            # maybe now the parent only contains 1 item and needs to be flattened?
+
+            gdparent = parent.getparent()
+            clean_node(parent)
+
+            if gdparent is not None and parent.getparent() is None:
+                # if the parent got deleted/dropped
+                spread_score(gdparent, score + grades[parent], grades)
+
             else:
-                break
+                # if the parent was kept
+                spread_score(parent, score, grades)
+
+        else:
+            # if the node was kept
+            spread_score(node, score, grades)
 
     return grades
 
 
+def spread_score(node, score, grades):
+    for ancestor in [node,] + list(node.iterancestors()):
+        if score >= 1 or ancestor is node:
+            try:
+                grades[ancestor] += score
+            except KeyError:
+                grades[ancestor] = score
+
+            score /= 2
+
+        else:
+            break
+
+
 def write_score_all(root, grades):
-    for item in root.iter():
-        item.attrib['score'] = str(int(grades[item]))
+    for node in root.iter():
+        node.attrib['score'] = str(int(grades[node]))
 
 
-def clean_html(root):
-    for item in list(root.iter()): # list() needed to be able to remove elements while iterating
-        # Step 1. Do we keep the node?
+def clean_node(node):
+    # Step 1. Do we keep the node?
 
-        if item.tag in tags_junk:
-            # remove shitty tags
-            item.getparent().remove(item)
-            continue
+    if node.getparent() is None:
+        # this is <html/>
+        return
 
-        if item.tag in ['div'] \
-            and len(list(item.iterchildren())) <= 1 \
-            and not (item.text or '').strip() \
-            and not (item.tail or '').strip():
-            # remove div with only one item inside
-            item.drop_tag()
-            continue
+    if node.tag in tags_junk:
+        # remove shitty tags
+        node.getparent().remove(node)
+        return
 
-        class_id = item.get('class', '') + item.get('id', '')
-        if regex_bad.match(class_id) is not None:
-            # remove shitty class/id
-            item.getparent().remove(item)
-            continue
+    # Turn <div><p>Bla bla bla</p></div> into <p>Bla bla bla</p>
 
-        if isinstance(item, lxml.html.HtmlComment):
-            # remove comments
-            item.getparent().remove(item)
-            continue
+    if node.tag in ['div'] \
+        and len(list(node.iterchildren())) <= 1 \
+        and not (node.text or '').strip() \
+        and not (node.tail or '').strip():
+        node.drop_tag()
+        return
 
-        # Step 2. Clean the node's attributes
+    class_id = node.get('class', '') + node.get('id', '')
+    if len(regex_junk.findall(class_id)) >= 2:
+        # remove shitty class/id
+        node.getparent().remove(node)
+        return
 
-        for attrib in item.attrib:
-            if attrib not in attributes_fine:
-                del item.attrib[attrib]
+    if node.tag == 'a' and len(list(node.iter())) > 3:
+        # shitty link
+        node.getparent().remove(node)
+        return
+
+    if isinstance(node, lxml.html.HtmlComment):
+        # remove comments
+        node.getparent().remove(node)
+        return
+
+    # Step 2. Clean the node's attributes
+
+    for attrib in node.attrib:
+        if attrib not in attributes_fine:
+            del node.attrib[attrib]
 
 
 def br2p(root):
-    for item in list(root.iterfind('.//br')):
-        parent = item.getparent()
+    for node in list(root.iterfind('.//br')):
+        parent = node.getparent()
         if parent is None:
             continue
 
@@ -152,23 +199,23 @@ def br2p(root):
         if gdparent is None:
             continue
 
-        if item.tail is None:
+        if node.tail is None:
             # if <br/> is at the end of a div (to avoid having <p/>)
             continue
 
         else:
-            # set up new item
-            new_item = lxml.html.Element(parent.tag)
-            new_item.text = item.tail
+            # set up new node
+            new_node = lxml.html.Element(parent.tag)
+            new_node.text = node.tail
 
-            for child in item.itersiblings():
-                new_item.append(child)
+            for child in node.itersiblings():
+                new_node.append(child)
 
             # delete br
-            item.tail = None
-            parent.remove(item)
+            node.tail = None
+            parent.remove(node)
 
-            gdparent.insert(gdparent.index(parent)+1, new_item)
+            gdparent.insert(gdparent.index(parent)+1, new_node)
 
 
 def lowest_common_ancestor(nodeA, nodeB, max_depth=None):
@@ -186,32 +233,28 @@ def lowest_common_ancestor(nodeA, nodeB, max_depth=None):
         if ancestorA in ancestorsB:
             return ancestorA
 
-    return nodeA # should always find one tho, at least <html/>
+    return nodeA # should always find one tho, at least <html/>, but needed for max_depth
 
 
 def rank_nodes(grades):
     return sorted(grades.items(), key=lambda x: x[1], reverse=True)
 
 
-def get_best_node(grades):
+def get_best_node(grades, highlight=False):
     top = rank_nodes(grades)
+    lowest = lowest_common_ancestor(top[0][0], top[1][0], 3)
 
-    if top[0][1] < top[1][1] * 1.6:
-        # we might still want to include the 2nd best node (great for articles split with images)
+    if highlight:
+        top[0][0].attrib['style'] = 'border: 2px solid blue'
+        top[1][0].attrib['style'] = 'border: 2px solid green'
+        lowest.attrib['style'] = 'outline: 2px solid red'
 
-        cmn_ancestor = lowest_common_ancestor(top[0][0], top[1][0], 3)
-        return cmn_ancestor
-
-    else:
-        return top[0][0]
+    return lowest
 
 
 def get_article(data, url=None, encoding=None):
     html = parse(data, encoding)
-
-    clean_html(html)
     br2p(html)
-
     scores = score_all(html)
     best = get_best_node(scores)
 
