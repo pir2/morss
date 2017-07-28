@@ -1,0 +1,16 @@
+[Unit]
+Description = morss
+After=ttrss.service
+
+[Service]
+WorkingDirectory=/var/www/morss
+
+ExecStart=/bin/bash -c 'cd /var/www/morss; gunicorn -c gunicorn-config.py main:application'
+
+User = www-data
+Group = www-data
+SyslogIdentifier=morss
+Restart=always
+TimeoutSec=3600
+[Install]
+WantedBy = multi-user.target
