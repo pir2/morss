@@ -270,9 +270,10 @@ def ItemFill(item, options, feedurl='/', fast=False):
         log('non-text page')
         return True
 
-    out = readabilite.get_article(data, options.encoding or crawler.detect_encoding(data, con))
+    out = readabilite.get_article(data, link, options.encoding or crawler.detect_encoding(data, con))
 
-    item.content = out
+    if out is not None:
+        item.content = out
 
     return True
 
@@ -364,7 +365,7 @@ def FeedFetch(url, options):
 
     contenttype = con.info().get('Content-Type', '').split(';')[0]
 
-    if re.match(b'\s*<?xml', xml) is not None or contenttype in crawler.MIMETYPE['xml']:
+    if re.match(b'\s*<\?xml', xml) is not None or contenttype in crawler.MIMETYPE['xml']:
         rss = feeds.parse(xml)
 
     elif feedify.supported(url):
@@ -512,7 +513,7 @@ def process(url, cache=None, options=None):
     options = Options(options)
 
     if cache:
-        crawler.sqlite_default = cache
+        crawler.default_cache = crawler.SQLiteCache(cache)
 
     rss = FeedFetch(url, options)
     rss = FeedGather(rss, url, options)
@@ -573,7 +574,7 @@ def cgi_app(environ, start_response):
     else:
         headers['content-type'] = 'text/xml'
 
-    crawler.sqlite_default = os.path.join(os.getcwd(), 'morss-cache.db')
+    crawler.default_cache = crawler.SQLiteCache(os.path.join(os.getcwd(), 'morss-cache.db'))
 
     # get the work done
     rss = FeedFetch(url, options)
@@ -621,23 +622,23 @@ def cgi_wrapper(environ, start_response):
             headers['status'] = '200 OK'
             headers['content-type'] = files[url]
             start_response(headers['status'], list(headers.items()))
-            return body
+            return [body]
 
         except IOError:
             headers['status'] = '404 Not found'
             start_response(headers['status'], list(headers.items()))
-            return 'Error %s' % headers['status']
+            return ['Error %s' % headers['status']]
 
     # actual morss use
     try:
-        return cgi_app(environ, start_response) or []
+        return [cgi_app(environ, start_response)] or []
     except (KeyboardInterrupt, SystemExit):
         raise
     except Exception as e:
         headers = {'status': '500 Oops', 'content-type': 'text/plain'}
         start_response(headers['status'], list(headers.items()), sys.exc_info())
         log('ERROR <%s>: %s' % (url, e.message), force=True)
-        return 'An error happened:\n%s' % e.message
+        return ['An error happened:\n%s' % e.message]
 
 
 def cli_app():
@@ -647,7 +648,7 @@ def cli_app():
     global DEBUG
     DEBUG = options.debug
 
-    crawler.sqlite_default = os.path.expanduser('~/.cache/morss-cache.db')
+    crawler.default_cache = crawler.SQLiteCache(os.path.expanduser('~/.cache/morss-cache.db'))
 
     rss = FeedFetch(url, options)
     rss = FeedGather(rss, url, options)

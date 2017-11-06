@@ -7,8 +7,8 @@ from gzip import GzipFile
 from io import BytesIO, StringIO
 import re
 import chardet
+from cgi import parse_header
 import lxml.html
-import sqlite3
 import time
 
 try:
@@ -22,7 +22,6 @@ try:
     basestring
 except NameError:
     basestring = unicode = str
-    buffer = memoryview
 
 
 MIMETYPE = {
@@ -44,6 +43,8 @@ def custom_handler(accept=None, strict=False, delay=None, encoding=None, basic=F
     # FTPHandler, FileHandler, HTTPErrorProcessor]
     # & HTTPSHandler
 
+    #handlers.append(DebugHandler())
+    handlers.append(SizeLimitHandler(500*1024)) # 500KiB
     handlers.append(HTTPCookieProcessor())
     handlers.append(GZIPHandler())
     handlers.append(HTTPEquivHandler())
@@ -58,9 +59,63 @@ def custom_handler(accept=None, strict=False, delay=None, encoding=None, basic=F
     if accept:
         handlers.append(ContentNegociationHandler(MIMETYPE[accept], strict))
 
-    handlers.append(SQliteCacheHandler(delay))
+    handlers.append(CacheHandler(force_min=delay))
 
     return build_opener(*handlers)
+
+
+class DebugHandler(BaseHandler):
+    handler_order = 2000
+
+    def http_request(self, req):
+        print(repr(req.header_items()))
+        return req
+
+    def http_response(self, req, resp):
+        print(resp.headers.__dict__)
+        return resp
+
+    https_request = http_request
+    https_response = http_response
+
+
+class SizeLimitHandler(BaseHandler):
+    """ Limit file size, defaults to 5MiB """
+
+    handler_order = 450
+
+    def __init__(self, limit=5*1024^2):
+        self.limit = limit
+
+    def http_response(self, req, resp):
+        data = resp.read(self.limit)
+
+        fp = BytesIO(data)
+        old_resp = resp
+        resp = addinfourl(fp, old_resp.headers, old_resp.url, old_resp.code)
+        resp.msg = old_resp.msg
+
+        return resp
+
+    https_response = http_response
+
+
+def UnGzip(cprss, CHUNKSIZE=64*1024): # the bigger the CHUNKSIZE, the faster
+    " Supports truncated files "
+    gz = GzipFile(fileobj=cprss, mode='rb')
+
+    data = b''
+    chunk = gz.read(CHUNKSIZE)
+
+    try:
+        while chunk:
+            data += chunk
+            chunk = gz.read(CHUNKSIZE)
+
+    except (IOError, EOFError):
+        pass
+
+    return data
 
 
 class GZIPHandler(BaseHandler):
@@ -72,7 +127,9 @@ class GZIPHandler(BaseHandler):
         if 200 <= resp.code < 300:
             if resp.headers.get('Content-Encoding') == 'gzip':
                 data = resp.read()
-                data = GzipFile(fileobj=BytesIO(data), mode='r').read()
+
+                data = UnGzip(BytesIO(data))
+
                 resp.headers['Content-Encoding'] = 'identity'
 
                 fp = BytesIO(data)
@@ -86,9 +143,15 @@ class GZIPHandler(BaseHandler):
     https_request = http_request
 
 
-def detect_encoding(data, con=None):
-    if con is not None and con.info().get('charset'):
-        return con.info().get('charset')
+def detect_encoding(data, resp=None):
+    if resp is not None:
+        enc = resp.headers.get('charset')
+        if enc is not None:
+            return enc
+
+        enc = parse_header(resp.headers.get('content-type', ''))[1].get('charset')
+        if enc is not None:
+            return enc
 
     match = re.search(b'charset=["\']?([0-9a-zA-Z-]+)', data[:1000])
     if match:
@@ -246,42 +309,37 @@ class HTTPRefreshHandler(BaseHandler):
     https_response = http_response
 
 
-class BaseCacheHandler(BaseHandler):
-    " Cache based on etags/last-modified. Inherit from this to implement actual storage "
+default_cache = {}
+
+
+class CacheHandler(BaseHandler):
+    " Cache based on etags/last-modified "
 
     private_cache = False # False to behave like a CDN (or if you just don't care), True like a PC
     handler_order = 499
 
-    def __init__(self, force_min=None):
+    def __init__(self, cache=None, force_min=None):
+        self.cache = cache or default_cache
         self.force_min = force_min # force_min (seconds) to bypass http headers, -1 forever, 0 never, -2 do nothing if not in cache
 
-    def _load(self, url):
-        out = list(self.load(url))
+    def load(self, url):
+        try:
+            out = list(self.cache[url])
+        except KeyError:
+            out = [None, None, unicode(), bytes(), 0]
 
         if sys.version_info[0] >= 3:
             out[2] = email.message_from_string(out[2] or unicode()) # headers
         else:
             out[2] = mimetools.Message(StringIO(out[2] or unicode()))
 
-        out[3] = out[3] or bytes() # data
-        out[4] = out[4] or 0 # timestamp
-
         return out
 
-    def load(self, url):
-        " Return the basic vars (code, msg, headers, data, timestamp) "
-        return (None, None, None, None, None)
-
-    def _save(self, url, code, msg, headers, data, timestamp):
-        headers = unicode(headers)
-        self.save(url, code, msg, headers, data, timestamp)
-
     def save(self, url, code, msg, headers, data, timestamp):
-        " Save values to disk "
-        pass
+        self.cache[url] = (code, msg, unicode(headers), data, timestamp)
 
     def http_request(self, req):
-        (code, msg, headers, data, timestamp) = self._load(req.get_full_url())
+        (code, msg, headers, data, timestamp) = self.load(req.get_full_url())
 
         if 'etag' in headers:
             req.add_unredirected_header('If-None-Match', headers['etag'])
@@ -292,7 +350,7 @@ class BaseCacheHandler(BaseHandler):
         return req
 
     def http_open(self, req):
-        (code, msg, headers, data, timestamp) = self._load(req.get_full_url())
+        (code, msg, headers, data, timestamp) = self.load(req.get_full_url())
 
         # some info needed to process everything
         cache_control = parse_http_list(headers.get('cache-control', ()))
@@ -383,7 +441,7 @@ class BaseCacheHandler(BaseHandler):
 
         # save to disk
         data = resp.read()
-        self._save(req.get_full_url(), resp.code, resp.msg, resp.headers, data, time.time())
+        self.save(req.get_full_url(), resp.code, resp.msg, resp.headers, data, time.time())
 
         fp = BytesIO(data)
         old_resp = resp
@@ -393,11 +451,11 @@ class BaseCacheHandler(BaseHandler):
         return resp
 
     def http_error_304(self, req, fp, code, msg, headers):
-        cache = list(self._load(req.get_full_url()))
+        cache = list(self.load(req.get_full_url()))
 
         if cache[0]:
             cache[-1] = time.time()
-            self._save(req.get_full_url(), *cache)
+            self.save(req.get_full_url(), *cache)
 
             new = Request(req.get_full_url(),
                            headers=req.headers,
@@ -414,36 +472,81 @@ class BaseCacheHandler(BaseHandler):
     https_response = http_response
 
 
-sqlite_default = ':memory'
+class BaseCache:
+    def __contains__(self, url):
+        try:
+            self[url]
+
+        except KeyError:
+            return False
+
+        else:
+            return True
 
 
-class SQliteCacheHandler(BaseCacheHandler):
-    def __init__(self, force_min=-1, filename=None):
-        BaseCacheHandler.__init__(self, force_min)
+import sqlite3
 
+
+class SQLiteCache(BaseCache):
+    def __init__(self, filename=':memory:'):
         self.con = sqlite3.connect(filename or sqlite_default, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
-        self.con.execute('create table if not exists data (url unicode PRIMARY KEY, code int, msg unicode, headers unicode, data bytes, timestamp int)')
-        self.con.commit()
+
+        with self.con:
+            self.con.execute('CREATE TABLE IF NOT EXISTS data (url UNICODE PRIMARY KEY, code INT, msg UNICODE, headers UNICODE, data BLOB, timestamp INT)')
+            self.con.execute('pragma journal_mode=WAL')
 
     def __del__(self):
         self.con.close()
 
-    def load(self, url):
-        row = self.con.execute('select * from data where url=?', (url,)).fetchone()
+    def __getitem__(self, url):
+        row = self.con.execute('SELECT * FROM data WHERE url=?', (url,)).fetchone()
 
         if not row:
-            return (None, None, None, None, None)
+            raise KeyError
 
         return row[1:]
 
-    def save(self, url, code, msg, headers, data, timestamp):
-        data = buffer(data)
-
-        if self.con.execute('select code from data where url=?', (url,)).fetchone():
-            self.con.execute('update data set code=?, msg=?, headers=?, data=?, timestamp=? where url=?',
-                (code, msg, headers, data, timestamp, url))
+    def __setitem__(self, url, value): # value = (code, msg, headers, data, timestamp)
+        if url in self:
+            with self.con:
+                self.con.execute('UPDATE data SET code=?, msg=?, headers=?, data=?, timestamp=? WHERE url=?',
+                    value + (url,))
 
         else:
-            self.con.execute('insert into data values (?,?,?,?,?,?)', (url, code, msg, headers, data, timestamp))
+            with self.con:
+                self.con.execute('INSERT INTO data VALUES (?,?,?,?,?,?)', (url,) + value)
 
-        self.con.commit()
+
+import pymysql.cursors
+
+
+class MySQLCacheHandler(BaseCache):
+    " NB. Requires mono-threading, as pymysql doesn't isn't thread-safe "
+    def __init__(self, user, password, database, host='localhost'):
+        self.con = pymysql.connect(host=host, user=user, password=password, database=database, charset='utf8', autocommit=True)
+
+        with self.con.cursor() as cursor:
+            cursor.execute('CREATE TABLE IF NOT EXISTS data (url VARCHAR(255) NOT NULL PRIMARY KEY, code INT, msg TEXT, headers TEXT, data BLOB, timestamp INT)')
+
+    def __del__(self):
+        self.con.close()
+
+    def __getitem__(self, url):
+        cursor = self.con.cursor()
+        cursor.execute('SELECT * FROM data WHERE url=%s', (url,))
+        row = cursor.fetchone()
+
+        if not row:
+            raise KeyError
+
+        return row[1:]
+
+    def __setitem__(self, url, value): # (code, msg, headers, data, timestamp)
+        if url in self:
+            with self.con.cursor() as cursor:
+                cursor.execute('UPDATE data SET code=%s, msg=%s, headers=%s, data=%s, timestamp=%s WHERE url=%s',
+                    value + (url,))
+
+        else:
+            with self.con.cursor() as cursor:
+                cursor.execute('INSERT INTO data VALUES (%s,%s,%s,%s,%s,%s)', (url,) + value)
