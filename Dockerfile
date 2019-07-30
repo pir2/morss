@@ -5,7 +5,6 @@ WORKDIR /usr/src/app
 # Install hass component dependencies
 COPY requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir uwsgi
 
 # Copy source
 COPY . .
