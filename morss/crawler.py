@@ -33,7 +33,8 @@ MIMETYPE = {
     'html': ['text/html', 'application/xhtml+xml', 'application/xml']}
 
 
-DEFAULT_UA = 'Mozilla/5.0 (X11; Linux x86_64; rv:25.0) Gecko/20100101 Firefox/25.0'
+DEFAULT_UA = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+#'Mozilla/5.0 (X11; Linux x86_64; rv:25.0) Gecko/20100101 Firefox/25.0'
 
 
 def custom_handler(accept=None, strict=False, delay=None, encoding=None, basic=False):
