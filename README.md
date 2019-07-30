@@ -158,7 +158,7 @@ without any argument, on port 8080.
 You can change the port and the location of the `www/` folder like this `python -m morss 9000 --root ../../www`.
 
 #### Using morss' internal HTTP server and Docker
-	docker build https://github.com/pir2/morss.git morss
+	docker build https://github.com/pir2/morss.git -t morss
 	docker run -d --name morss -p 9090:9090 morss:latest
 
 #### Passing arguments
