@@ -1,7 +1,6 @@
 FROM python:2.7-buster
 
 WORKDIR /usr/src/app
-USER 9000  
 
 # Install hass component dependencies
 COPY requirements.txt requirements.txt
