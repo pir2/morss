@@ -1,15 +1,15 @@
 FROM python:2.7-buster
 
-RUN groupadd -r morss && useradd --no-log-init -r -g morss morss
+USER 9000
 
 WORKDIR /usr/src/app
 
 # Install hass component dependencies
 COPY requirements.txt requirements.txt
 COPY www/index.html index.html
-RUN pip install --user morss --no-cache-dir -r requirements.txt && \
-    pip install --user morss --no-cache-dir uwsgi && \
-    pip install --user morss --no-cache-dir gunicorn gevent
+RUN pip install --user --no-cache-dir -r requirements.txt && \
+    pip install --user --no-cache-dir uwsgi && \
+    pip install --user --no-cache-dir gunicorn gevent
 # Copy source
 COPY . .
 
