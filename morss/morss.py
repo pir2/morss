@@ -36,7 +36,7 @@ except ImportError:
 
 LIM_ITEM = 100  # deletes what's beyond
 LIM_TIME = 7  # deletes what's after
-MAX_ITEM = 50  # cache-only beyond
+MAX_ITEM = 100  # cache-only beyond
 MAX_TIME = 7  # cache-only after (in sec)
 DELAY = 10 * 60  # xml cache & ETag cache (in sec)
 TIMEOUT = 4  # http timeout (in sec)
