@@ -25,6 +25,6 @@ CMD [ "gunicorn", \
        "--preload", \ 
        "--worker-class=gevent", \
        "--max-requests 10", \
-       "--max-requests-jitter 10," \
+       "--max-requests-jitter 10", \
        "--bind 0.0.0.0:9090"]
     
