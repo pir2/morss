@@ -395,8 +395,6 @@ def FeedFetch(url, options):
         rss = feed.feed
         
     elif ('contenttype == text/xml, charset=UTF-8'):
-        feed = feedify.Builder(url, xml)
-        feed.build()
         rss = feeds.parse(xml)
         
     else:
