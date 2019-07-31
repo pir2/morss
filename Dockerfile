@@ -12,4 +12,8 @@ WORKDIR "/morss"
 EXPOSE 9090
 
 #CMD [ "python", "-m", "morss", "9090", "--theforce", "--root", "./www" ]
-CMD [ "uwsgi", "--http", ":9090", "--wsgi-file", "main.py", "--pyargv", "--root", "./www" ]
+CMD [ "uwsgi", \
+    "--http", ":9090", \
+    "--wsgi-file", "main.py", \
+    "--pyargv", "--root ./www/"\
+    ]
