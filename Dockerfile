@@ -22,7 +22,7 @@ EXPOSE 9090
 CMD [ "uwsgi", \
     "--http", ":9090", \
     "--wsgi-file", "main.py", \
-    "--pyargv", "--proxy", "--root", "./www/" \
+    "--pyargv", "'proxy --root ./www/'" \
     ]
 
 #CMD [ "gunicorn", \
