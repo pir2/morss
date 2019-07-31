@@ -20,6 +20,6 @@ EXPOSE 9090
 #    ]
 
 CMD ["gunicorn", \
-    "-c gunicorn-docker.py main:application" \
+    "-c ./gunicorn-docker.py main:application" \
     ]
     
