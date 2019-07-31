@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 COPY . .
 
 WORKDIR "/morss"
-
+USER 9000  
 EXPOSE 9090
 
 #CMD [ "python", "-m", "morss", "9090", "--theforce", "--root", "./www" ]
