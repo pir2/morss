@@ -1,5 +1,6 @@
 FROM python:2.7-buster
 
+USER 9000
 WORKDIR /usr/src/app
 
 # Install hass component dependencies
