@@ -21,6 +21,7 @@ EXPOSE 9090
 #CMD [ "python", "-m", "morss", "9090", "--theforce", "--root", "./www" ]
 CMD [ "uwsgi", \
     "--http", ":9090", \
+    "--process=4", \
     "--wsgi-file", "main.py", \
     "--pyargv", "'proxy --root ./www/'" \
     ]
