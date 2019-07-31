@@ -18,7 +18,7 @@ EXPOSE 9090
 #    "--wsgi-file", "main.py", \
 #    "--pyargv", "--root ./www/"\
 #    ]
-gunicorn -c gunicorn-config.py main:application
+
 CMD ["gunicorn", \
     "-c gunicorn-docker.py", \
     "main:application" \
