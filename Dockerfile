@@ -1,16 +1,16 @@
 FROM python:2.7-buster
 
-USER 9000
-
 WORKDIR /usr/src/app
 
 # Install hass component dependencies
 COPY requirements.txt requirements.txt
 COPY www/index.html index.html
-RUN pip install --user --no-cache-dir -r requirements.txt && \
-    pip install --user --no-cache-dir uwsgi && \
-    pip install --user --no-cache-dir gunicorn gevent
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir uwsgi && \
+    pip install --no-cache-dir gunicorn gevent
 # Copy source
+USER 9000
+
 COPY . .
 
 EXPOSE 9090
