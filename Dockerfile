@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt && \
     pip install uwsgi
 # Copy source
 COPY . .
-WORKDIR "/usr/src/app/morss"
+
 EXPOSE 9090
 
 #CMD [ "python", "-m", "morss", "9090", "--theforce", "--root", "./www" ]
