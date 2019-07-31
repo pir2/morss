@@ -4,11 +4,15 @@ WORKDIR /usr/src/app
 
 # Install hass component dependencies
 COPY requirements.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install uwsgi
 
 # Copy source
 COPY . .
 
+WORKDIR "/morss"
+
 EXPOSE 9090
 
-CMD [ "python", "-m", "morss", "9090", "--theforce", "--root", "./www" ]
+#CMD [ "python", "-m", "morss", "9090", "--theforce", "--root", "./www" ]
+CMD [ "uwsgi", "--http", ":9090", "--plugin", "python", "--wi-file", "main.py", "--pyargv", "--root", "./www" ]
