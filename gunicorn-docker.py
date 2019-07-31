@@ -9,6 +9,6 @@ worker_class = 'gevent'
 #user='www-data'
 #group='www-data'
 pidfile='gunicorn_pid'
-log-file=-
+log-file='-'
 #accesslog='gunicorn_access.log'
 #errorlog='gunicorn_error.log'
