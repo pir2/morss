@@ -23,7 +23,7 @@ CMD [ "uwsgi", \
     "--http", ":9090", \
     "--process=4", \
     "--wsgi-file", "main.py", \
-    "--pyargv", "'proxy --root ./www/'" \
+    "--pyargv='proxy --root ./www/'" \
     ]
 
 #CMD [ "gunicorn", \
