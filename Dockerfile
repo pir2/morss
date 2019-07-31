@@ -4,6 +4,7 @@ WORKDIR /usr/src/app
 
 # Install hass component dependencies
 COPY requirements.txt requirements.txt
+COPY www/index.html index.html
 RUN pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir uwsgi && \
     pip install --no-cache-dir gunicorn gevent
