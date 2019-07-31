@@ -20,11 +20,11 @@ EXPOSE 9090
 #    ]
 
 CMD [ "gunicorn", \
-       "-w 5", \
+       "-w=5", \
        "main:application", \
        "--preload", \ 
        "--worker-class=gevent", \
-       "--max-requests 10", \
-       "--max-requests-jitter 10", \
-       "--bind 0.0.0.0:9090"]
+       "--max-requests=10", \
+       "--max-requests-jitter=10", \
+       "--bind=0.0.0.0:9090"]
     
