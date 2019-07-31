@@ -13,17 +13,17 @@ COPY . .
 
 EXPOSE 9090
 
-CMD [ "gunicorn", \
-      "-c=gunicorn-docker.py", \
-      "main:application" \
-      ]
+#CMD [ "gunicorn", \
+#      "-c=gunicorn-docker.py", \
+#      "main:application" \
+#      ]
 
 #CMD [ "python", "-m", "morss", "9090", "--theforce", "--root", "./www" ]
-#CMD [ "uwsgi", \
-#    "--http", ":9090", \
-#    "--wsgi-file", "main.py", \
-#    "--pyargv", "--proxy", "--root", "./www/" \
-#    ]
+CMD [ "uwsgi", \
+    "--http", ":9090", \
+    "--wsgi-file", "main.py", \
+    "--pyargv", "--proxy", "--root", "./www/" \
+    ]
 
 #CMD [ "gunicorn", \
 #       "-w=5", \
