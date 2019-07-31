@@ -9,8 +9,6 @@ RUN pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir uwsgi && \
     pip install --no-cache-dir gunicorn gevent
 # Copy source
-USER 9000
-
 COPY . .
 
 EXPOSE 9090
