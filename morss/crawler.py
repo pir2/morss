@@ -523,6 +523,7 @@ class MySQLCacheHandler(BaseCache):
 
         with self.con.cursor() as cursor:
             cursor.execute('CREATE TABLE IF NOT EXISTS data (url VARCHAR(255) NOT NULL PRIMARY KEY, code INT, msg TEXT, headers TEXT, data BLOB, timestamp INT)')
+            cursor.execute('TRUNCATE TABLE data')
 
     def __del__(self):
         self.con.close()
